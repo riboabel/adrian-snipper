@@ -163,7 +163,7 @@ module.exports = {
             .catch(reject);
     }),
     butTokenWithBUSD: (amountToPayInBUSD, tokenAddress, targetAccount) => buyWithBUSD(targetAccount, tokenAddress, amountToPayInBUSD),
-    sellTokenToBNB: async (amountToPayInToken, tokenAddress, targetAccount) => {
+    sellTokenToWBNB: async (amountToPayInToken, tokenAddress, targetAccount) => {
         let WBNBAddress = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
 
         let tokensToSell = amountToPayInToken;
@@ -172,6 +172,43 @@ module.exports = {
 
         let contract = new web3.eth.Contract(routerAbi, pancakeSwapRouterAddress, {from: targetAccount.address});
         let data = contract.methods.swapExactTokensForTokens(
+            web3.utils.toHex(tokensToSell),
+            web3.utils.toHex(0),
+            [tokenAddress, WBNBAddress],
+            targetAccount.address,
+            web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3),
+        );
+
+        let estimatedGas = await data.estimateGas({gas: 10});
+
+        console.log(`Gas estimado para la venta: ${estimatedGas} GWEI...`);
+
+        let count = await web3.eth.getTransactionCount(targetAccount.address);
+        let rawTransaction = {
+            "from": targetAccount.address,
+            "gasPrice": web3.utils.toHex(config.gasPrice * 1000000000),
+            "gasLimit": web3.utils.toHex(config.gasLimit),
+            "to": pancakeSwapRouterAddress,
+            "data": data.encodeABI(),
+            "nonce": web3.utils.toHex(count)
+        };
+
+        let transaction = new Tx(rawTransaction, {'common': BSC_FORK});
+
+        transaction.sign(privateKey);
+
+        return await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
+    },
+
+    sellTokenToBNB: async (amountToPayInToken, tokenAddress, targetAccount) => {
+        let WBNBAddress = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
+
+        let tokensToSell = amountToPayInToken;
+
+        let privateKey = Buffer.from(targetAccount.privateKey, 'hex');
+
+        let contract = new web3.eth.Contract(routerAbi, pancakeSwapRouterAddress, {from: targetAccount.address});
+        let data = contract.methods.swapExactTokensForETH(
             web3.utils.toHex(tokensToSell),
             web3.utils.toHex(0),
             [tokenAddress, WBNBAddress],

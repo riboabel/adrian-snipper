@@ -4,7 +4,6 @@ const _ = require('underscore'),
     Big = require('big.js'),
     colors = require('colors'),
     moment = require('moment'),
-    buyer = require('./buyer'),
     config = require('./config.json'),
     calcBNBPrice = require('./get-prices'),
     tokenData = require('./token'),
@@ -51,7 +50,7 @@ const watchBuyingPrices = async () => {
 };
 
 const buyToken = prices => new Promise((resolve, reject) =>  {
-    let price = prices[config.buyWith === 'BNB' ? 0 : 1];
+    let price = prices[config.tokenToCompare === 'BNB' ? 0 : 1];
     let estimatedTokensToReceive = (config.amountToSpend / price) * 0.995;
 
     console.log(`Vamos a comprar ~${estimatedTokensToReceive} ${token.name} con ${config.amountToSpend} ${config.buyWith}...`);
@@ -79,7 +78,7 @@ const buyToken = prices => new Promise((resolve, reject) =>  {
 });
 
 function readyForSell(priceInBNB, priceInBUSD) {
-    let price = new Big(config.buyWith === 'BNB' ? priceInBNB : priceInBUSD);
+    let price = new Big(config.tokenToCompare === 'BNB' ? priceInBNB : priceInBUSD);
 
     if ((false === config.sellWhenPrice) || (priceWhenBought === false)) {
         return true;
@@ -92,13 +91,12 @@ function readyForSell(priceInBNB, priceInBUSD) {
 
 async function watchSellPrices() {
     let prices, oldPrices = [new Big(0), new Big(0)];
-    let balance = await tokenData.getBalanceOf(token.address, wallet.address);
-    let tokensToSell = balance.balance;
     do {
-        prices = await calcBNBPrice(tokensToSell, token.address);
+        prices = await calcBNBPrice(1000, token.address);
         if (!oldPrices[0].eq(prices.priceInBNB) || !oldPrices[1].eq(prices.priceInBUSD)) {
             oldPrices[0] = new Big(prices.priceInBNB);
             oldPrices[1] = new Big(prices.priceInBUSD);
+            console.log(`Price when bought: ${priceWhenBought}`);
             console.log(`${moment().format('H:mm:ss').blue}: ${token.name.green}: ${colors.green(prices.priceInBNB)} BNB | ${colors.green(prices.priceInBUSD)} BUSD`);
         }
     } while (!readyForSell(prices.priceInBNB, prices.priceInBUSD));
