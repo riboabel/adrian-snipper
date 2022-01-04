@@ -1,55 +1,54 @@
 "use strict";
 
 const _ = require('underscore'),
+    Big = require('big.js'),
     colors = require('colors'),
     moment = require('moment'),
     buyer = require('./buyer'),
     config = require('./config.json'),
     calcBNBPrice = require('./get-prices'),
     tokenData = require('./token'),
-    wallet = require('./wallet.json'),
     { buyTokenWithBNB, butTokenWithBUSD, sellTokenToBNB } = require('./buyer');
 
-// mainnet
-//const web3 = new Web3('https://bsc-dataseed1.binance.org:443');
-
-// testnet
-//const web3 = new Web3('https://data-seed-prebsc-1-s1.binance.org:8545');
-
 const token = require('./tokens.json'),
-    targetWallet = require('./wallet.json');
+    wallet = require('./wallet.json');
 
 let priceWhenBought = false;
 
 async function prepareToken() {
     let data = await tokenData.getDecimals(token.address);
 
-    console.log(`Preparando para ${token.name} (${data} decimales)...`);
+    console.log(`Preparando proceso para ${token.name}...`);
+    console.log(`Contrato ${token.address}`);
+    console.log(`${data} decimales`);
 }
 
 function readyForBuying(bnbPrice, busdPrice) {
-    let priceToCompare = config.tokenToCompare === 'BNB' ? bnbPrice : busdPrice;
-    return (false === config.maxTokenPrice) || config.maxTokenPrice >= priceToCompare;
+    let priceToCompare = new Big(config.tokenToCompare === 'BNB' ? bnbPrice : busdPrice);
+
+    if (false === config.maxTokenPrice) {
+        return true;
+    }
+
+    let maxTokenPrice = new Big(config.maxTokenPrice);
+
+    return maxTokenPrice.gte(priceToCompare);
 }
 
-const watchBuyingPrices = () => new Promise(resolve => {
-    let go = () => {
-        calcBNBPrice(config.amountToSpend, token.address)
-            .then(prices => {
-                console.log(`${moment().format('H:mm:ss').blue}: ${token.name.green}: ${colors.green(prices.priceInBNB)} BNB | ${colors.green(prices.priceInBUSD)} BUSD`);
-                if (readyForBuying(prices.priceInBNB, prices.priceInBUSD)) {
-                    return resolve([prices.priceInBNB, prices.priceInBUSD]);
-                }
-                go();
-            })
-            .catch(e => {
-                console.log('Error watching prices for buying...');
-                reject(e);
-            })
-    };
+const watchBuyingPrices = async () => {
+    let prices, oldPrices = [new Big(0), new Big(0)];
 
-    go();
-});
+    do {
+        prices = await calcBNBPrice(config.amountToSpend, token.address);
+        if (!oldPrices[0].eq(prices.priceInBNB) || !oldPrices[1].eq(prices.priceInBUSD)) {
+            oldPrices[0] = new Big(prices.priceInBNB);
+            oldPrices[1] = new Big(prices.priceInBUSD);
+            console.log(`${moment().format('H:mm:ss').blue}: ${token.name.green}: ${colors.green(prices.priceInBNB)} BNB | ${colors.green(prices.priceInBUSD)} BUSD`);
+        }
+    } while (!readyForBuying(prices.priceInBNB, prices.priceInBUSD));
+
+    return [prices.priceInBNB, prices.priceInBUSD];
+};
 
 const buyToken = prices => new Promise((resolve, reject) =>  {
     let price = prices[config.buyWith === 'BNB' ? 0 : 1];
@@ -61,7 +60,7 @@ const buyToken = prices => new Promise((resolve, reject) =>  {
         throw new Error('No implementamos comprar con BUSD aún.');
     }
 
-    buyTokenWithBNB(config.amountToSpend, token.address, targetWallet)
+    buyTokenWithBNB(config.amountToSpend, token.address, wallet)
         .then(res => {
             priceWhenBought = price;
 
@@ -80,19 +79,29 @@ const buyToken = prices => new Promise((resolve, reject) =>  {
 });
 
 function readyForSell(priceInBNB, priceInBUSD) {
-    let price = config.buyWith === 'BNB' ? priceInBNB : priceInBUSD;
+    let price = new Big(config.buyWith === 'BNB' ? priceInBNB : priceInBUSD);
 
-    return (false === config.sellWhenPrice) || (priceWhenBought === false) || (config.sellWhenPrice * priceWhenBought >= price);
+    if ((false === config.sellWhenPrice) || (priceWhenBought === false)) {
+        return true;
+    }
+
+    let sellWhenPrice = new Big(config.sellWhenPrice);
+
+    return (new Big(priceWhenBought)).times(sellWhenPrice).gte(price);
 }
 
 async function watchSellPrices() {
-    let prices;
+    let prices, oldPrices = [new Big(0), new Big(0)];
     let balance = await tokenData.getBalanceOf(token.address, wallet.address);
     let tokensToSell = balance.balance;
     do {
         prices = await calcBNBPrice(tokensToSell, token.address);
-        console.log(`${moment().format('H:mm:ss').blue}: ${token.name.green}: ${colors.green(prices.priceInBNB)} BNB | ${colors.green(prices.priceInBUSD)} BUSD`);
-    } while (!readyForSell(prices));
+        if (!oldPrices[0].eq(prices.priceInBNB) || !oldPrices[1].eq(prices.priceInBUSD)) {
+            oldPrices[0] = new Big(prices.priceInBNB);
+            oldPrices[1] = new Big(prices.priceInBUSD);
+            console.log(`${moment().format('H:mm:ss').blue}: ${token.name.green}: ${colors.green(prices.priceInBNB)} BNB | ${colors.green(prices.priceInBUSD)} BUSD`);
+        }
+    } while (!readyForSell(prices.priceInBNB, prices.priceInBUSD));
 
     return [prices.priceInBNB, prices.priceInBUSD];
 }
@@ -101,7 +110,7 @@ async function sellToken() {
     let balance = await tokenData.getBalanceOf(token.address, wallet.address);
     let tokensToSell = balance.balance;
 
-    console.log(`Vamos a vender ~${tokensToSell / (10 ** balance.decimals)} ${token.name}...`);
+    console.log(`Vamos a vender ${(new Big(tokensToSell)).div((new Big(10)).pow(Number(balance.decimals))).toString()} ${token.name}...`);
 
     let res = await sellTokenToBNB(tokensToSell, token.address, wallet);
 
@@ -118,34 +127,17 @@ let init = async () => {
         }
 
         if (config.sellAfterBuy) {
-            await watchSellPrices();
-            await sellToken();
+            let prices = await watchSellPrices();
+            await sellToken(prices);
         }
 
         console.log('Proceso terminado');
     } catch (e) {
         console.log('Error');
         console.log(e.message);
+        console.log(e);
     }
 }
-
-// let init = async () => new Promise(resolve => {
-//     Promise.resolve()
-//         .then(prepareToken)
-//         .then(watchBuyingPrices)
-//         .then(buyToken)
-//         .then(() => {
-//             if (config.sellAfterBuy) {
-//                 return watchSellPrices()
-//                     .then(sellToken)
-//             }
-//         })
-//         .then(() => console.log('Proceso terminado.'))
-//         .catch(e => {
-//             console.log(e.message);
-//             resolve(false);
-//         });
-// });
 
 init();
 
