@@ -7,11 +7,11 @@
 // targetIndex is passed as an argument: process.argv.splice(2)[0]
 
 const numeral = require('numeral');
-const BigInteger = require('big-integer');
 const Tx = require('ethereumjs-tx').Transaction;
 const Common = require('ethereumjs-common').default;
 const routerAbi = require('./contracts.json').PancakeSwapFactory.abi;
 const tokenData = require('./token');
+const Big = require('big.js');
 
 let web3 = require('./provider')();
 
@@ -28,16 +28,6 @@ const BSC_FORK = Common.forCustomChain(
 
 let config = require('./config.json');
 let pancakeSwapRouterAddress = '0x10ed43c718714eb63d5aa57b78b54704e256024e';
-
-function setDecimals( number, decimals ){
-    number = number.toString();
-    let numberAbs = number.split('.')[0];
-    let numberDecimals = number.split('.')[1] ? number.split('.')[1] : '';
-    while( numberDecimals.length < decimals ){
-        numberDecimals += "0";
-    }
-    return numberAbs + numberDecimals;
-}
 
 async function buyWithBNB(targetAccount, tokenAddress, amount) {
 
@@ -162,7 +152,42 @@ module.exports = {
             .then(resolve)
             .catch(reject);
     }),
-    butTokenWithBUSD: (amountToPayInBUSD, tokenAddress, targetAccount) => buyWithBUSD(targetAccount, tokenAddress, amountToPayInBUSD),
+    buyTokenWithBUSD: async (amountToPayInBUSD, tokenAddress, targetAccount) => {
+        let BUSDAddress = '0xe9e7cea3dedca5984780bafc599bd69add087d56';
+
+        let tokensToSell = (new Big(amountToPayInBUSD)).times((new Big(10)).pow(18)).toString();
+
+        let privateKey = Buffer.from(targetAccount.privateKey, 'hex');
+
+        let contract = new web3.eth.Contract(routerAbi, pancakeSwapRouterAddress, {from: targetAccount.address});
+        let data = contract.methods.swapExactTokensForTokens(
+            web3.utils.toHex(tokensToSell),
+            web3.utils.toHex(0),
+            [BUSDAddress, tokenAddress],
+            targetAccount.address,
+            web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3),
+        );
+
+        let estimatedGas = await data.estimateGas({gas: 10});
+
+        console.log(`Gas estimado para la venta: ${estimatedGas} GWEI...`);
+
+        let count = await web3.eth.getTransactionCount(targetAccount.address);
+        let rawTransaction = {
+            "from": targetAccount.address,
+            "gasPrice": web3.utils.toHex(config.gasPrice * 1000000000),
+            "gasLimit": web3.utils.toHex(config.gasLimit),
+            "to": pancakeSwapRouterAddress,
+            "data": data.encodeABI(),
+            "nonce": web3.utils.toHex(count)
+        };
+
+        let transaction = new Tx(rawTransaction, {'common': BSC_FORK});
+
+        transaction.sign(privateKey);
+
+        return await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
+    },
     sellTokenToWBNB: async (amountToPayInToken, tokenAddress, targetAccount) => {
         let WBNBAddress = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
 
@@ -200,10 +225,8 @@ module.exports = {
         return await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
     },
 
-    sellTokenToBNB: async (amountToPayInToken, tokenAddress, targetAccount) => {
+    sellTokenToBNB: async (tokensToSell, tokenAddress, targetAccount) => {
         let WBNBAddress = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
-
-        let tokensToSell = amountToPayInToken;
 
         let privateKey = Buffer.from(targetAccount.privateKey, 'hex');
 
@@ -212,6 +235,42 @@ module.exports = {
             web3.utils.toHex(tokensToSell),
             web3.utils.toHex(0),
             [tokenAddress, WBNBAddress],
+            targetAccount.address,
+            web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3),
+        );
+
+        let estimatedGas = await data.estimateGas({gas: 10});
+
+        console.log(`Gas estimado para la venta: ${estimatedGas} GWEI...`);
+
+        let count = await web3.eth.getTransactionCount(targetAccount.address);
+        let rawTransaction = {
+            "from": targetAccount.address,
+            "gasPrice": web3.utils.toHex(config.gasPrice * 1000000000),
+            "gasLimit": web3.utils.toHex(config.gasLimit),
+            "to": pancakeSwapRouterAddress,
+            "data": data.encodeABI(),
+            "nonce": web3.utils.toHex(count)
+        };
+
+        let transaction = new Tx(rawTransaction, {'common': BSC_FORK});
+
+        transaction.sign(privateKey);
+
+        return await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
+    },
+    sellTokenToBUSD: async (amountToPayInToken, tokenAddress, targetAccount) => {
+        let BUSDAddress = '0xe9e7cea3dedca5984780bafc599bd69add087d56';
+
+        let tokensToSell = amountToPayInToken;
+
+        let privateKey = Buffer.from(targetAccount.privateKey, 'hex');
+
+        let contract = new web3.eth.Contract(routerAbi, pancakeSwapRouterAddress, {from: targetAccount.address});
+        let data = contract.methods.swapExactTokensForTokens(
+            web3.utils.toHex(tokensToSell),
+            web3.utils.toHex(0),
+            [tokenAddress, BUSDAddress],
             targetAccount.address,
             web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3),
         );

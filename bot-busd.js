@@ -17,14 +17,14 @@ let priceWhenBought = false;
 async function prepareToken() {
     let data = await tokenData.getDecimals(token.address);
 
-    console.log(`Preparando proceso para ${token.name}...`);
+    console.log(`Preparando proceso para ${token.name} con BUSD...`);
     console.log(`Contrato ${token.address}`);
     console.log(`${data} decimales`);
     console.log('\n');
 }
 
 function readyForBuying(bnbPrice, busdPrice) {
-    if (bnbPrice == 0) {
+    if (busdPrice == 0) {
         return false;
     }
 
@@ -44,11 +44,11 @@ async function watchBuyingPrices() {
 
     do {
         prices = await calcBNBPrice(config.amountToSpend, token.address);
-        if (prices.priceInBNB == 0) {
+        if (prices.priceInBUSD == 0) {
             console.log('Token sin liquidez aun.');
-        } else if (!oldPrices[0].eq(prices.priceInBNB)) {
-            oldPrices[0] = new Big(prices.priceInBNB);
-            console.log(`${moment().format('H:mm:ss').blue}: ${token.name.green}: ${colors.green(prices.priceInBNB)} BNB`);
+        } else if (!oldPrices[1].eq(prices.priceInBUSD)) {
+            oldPrices[1] = new Big(prices.priceInBUSD);
+            console.log(`${moment().format('H:mm:ss').blue}: ${token.name.green}: ${colors.green(prices.priceInBUSD)} BUSD`);
         }
     } while (!readyForBuying(prices.priceInBNB, prices.priceInBUSD));
 
@@ -71,7 +71,7 @@ async function buyToken(prices) {
     priceWhenBought = prices[config.tokenToCompare === 'BNB' ? 0 : 1];
 
     console.log('Compra realizada con éxito!');
-    console.log(`Se compró a ${prices[0]} BNB`);
+    console.log(`Se compró a ${prices[1]} BUSD`);
     console.log(`Tx: ${res.transactionHash}\n\n`);
 
     let balance = await tokenData.getBalanceOf(token.address, wallet.address);
@@ -101,7 +101,7 @@ async function watchSellPrices() {
     let prices = await calcBNBPrice(config.amountToSpend, token.address);
 
     if ((false !== config.sellWhenPrice) && (priceWhenBought !== false)) {
-        console.log(`Comprado en ${priceWhenBought} BNB. Precio actual: ${prices.priceInBNB}. Tiene que llegar a ${(new Big(priceWhenBought)).times(config.sellWhenPrice).toString()}`);
+        console.log(`Comprado en ${priceWhenBought} BUSD. Precio actual: ${prices.priceInBNB}. Tiene que llegar a ${(new Big(priceWhenBought)).times(config.sellWhenPrice).toString()}`);
         console.log('\n\n');
         console.log('Vigilando el precio...')
     }
