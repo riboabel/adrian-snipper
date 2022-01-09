@@ -37,8 +37,6 @@ const getBuyPriceBNB = async () => {
 
         amountOut = amounts[1];
     } catch (e) {
-        console.log(e.message);
-
         return null;
     }
 
@@ -64,8 +62,6 @@ const getBuyPriceBUSD = async () => {
 
         amountOut = amounts[1];
     } catch (e) {
-        console.log(e.message);
-
         return null;
     }
 
@@ -100,8 +96,6 @@ const getSellPriceBNB = async (amountToSell) => {
 
         amountOut = amounts[1];
     } catch (e) {
-        console.log(e.message);
-
         return null;
     }
 
@@ -126,8 +120,6 @@ const getSellPriceBUSD = async (amountToSell) => {
 
         amountOut = amounts[1];
     } catch (e) {
-        console.log(e.message);
-
         return null;
     }
 
@@ -149,7 +141,14 @@ const init = async() => {
     config = getConfig();
     web3 = provider();
     token = await new Token(config.tokens.MiToken.address);
-    tokenDecimals = Number(await token.decimals());
+
+    try {
+        tokenDecimals = Number(await token.decimals());
+    } catch (e) {
+        console.log(`${token.address} no parece ser un token válido.`);
+        process.exit(1);
+    }
+
     bsc_fork = Common.forCustomChain(config['BSC-FORK'].name, config['BSC-FORK'].options, config['BSC-FORK'].mode);
     pancake = new PancakeSwap();
 
@@ -169,11 +168,11 @@ const init = async() => {
             let s = [];
             if ((config.buyWith === 'BNB') || (config.buyWith === 'both')) {
                 prices.BNB = await getBuyPriceBNB();
-                s.push(`BNB: ${null !== prices.BNB ? prices.BNB : '<no>'}`);
+                s.push(`BNB: ${null !== prices.BNB ? prices.BNB : '<sin liquidez>'}`);
             }
             if ((config.buyWith === 'BUSD') || (config.buyWith === 'both')) {
                 prices.BUSD = await getBuyPriceBUSD();
-                s.push(`BUSD: ${null !== prices.BUSD ? prices.BUSD : '<no>'}`);
+                s.push(`BUSD: ${null !== prices.BUSD ? prices.BUSD : '<sin liquidez>'}`);
             }
 
             console.log(s.join(' | '));
