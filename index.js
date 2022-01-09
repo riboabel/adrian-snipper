@@ -1,6 +1,7 @@
 'use strict';
 
 const Web3 = require('web3');
+const moment = require('moment');
 const Big = require('big.js');
 const Common = require('ethereumjs-common').default;
 const Tx = require('ethereumjs-tx').Transaction;
@@ -175,7 +176,7 @@ const init = async() => {
                 s.push(`BUSD: ${null !== prices.BUSD ? prices.BUSD : '<sin liquidez>'}`);
             }
 
-            console.log(s.join(' | '));
+            console.log(`${moment().format('HH:mm:ss')}: ${s.join(' | ')}`);
         } while (false === (buyWith = canBuy(prices)));
 
         boughtPrice = prices[buyWith];
