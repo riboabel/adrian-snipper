@@ -9,7 +9,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "big-integer": "^1.6.51",
     "big.js": "^6.1.1",
     "colors": "^1.4.0",
     "ethereumjs-tx": "^2.1.2",
