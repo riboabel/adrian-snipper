@@ -8,18 +8,31 @@ config = config[config.mode];
 class Token {
     constructor(address) {
         this.address = address;
-    }
+        this._name = null;
+        this._symbol = null;
+        this._decimals = null;
+    };
 
     async name() {
-        let router = await new web3.eth.Contract(config.contracts.Token.abi, this.address);
+        if (null !== this._name) {
+            return this._name;
+        }
 
-        return await router.methods.name().call();
+        let router = await new web3.eth.Contract(config.contracts.Token.abi, this.address);
+        this._name = await router.methods.name().call();
+
+        return this._name;
     }
 
     async symbol() {
-        let router = await new web3.eth.Contract(config.contracts.Token.abi, this.address);
+        if (null !== this._symbol) {
+            return this._symbol;
+        }
 
-        return await router.methods.symbol().call();
+        let router = await new web3.eth.Contract(config.contracts.Token.abi, this.address);
+        this._symbol = await router.methods.symbol().call();
+
+        return this._symbol;
     }
 
     async getBalanceOf(accountAddress) {
@@ -29,9 +42,15 @@ class Token {
     }
 
     async decimals() {
+        if (null !== this._decimals) {
+            return this._decimals;
+        }
+
         let router = await new web3.eth.Contract(config.contracts.Token.abi, this.address);
 
-        return await router.methods.decimals().call();
+        this._decimals = await router.methods.decimals().call();
+
+        return this._decimals;
     }
 }
 
