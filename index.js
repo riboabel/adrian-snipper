@@ -128,9 +128,11 @@ const getSellPriceBUSD = async (amountToSell) => {
 };
 
 const canSell = prices => {
+    if (false === config.sellWhenPriceIs) {
+        return false;
+    }
+
     let r =
-        (false === config.sellWhenPriceIs)
-        ||
         ((boughtWith === 'BNB') && (new Big(prices.BNB)).gte((new Big(boughtPrice)).times(config.sellWhenPriceIs)))
         ||
         ((boughtWith === 'BUSD') && (new Big(prices.BUSD)).gte((new Big(boughtPrice)).times(config.sellWhenPriceIs)));
@@ -191,65 +193,79 @@ const init = async() => {
     }
 
     let tokensReceived = await (async() => {
-        let tx;
+        let tx, done = false;
 
-        if (boughtWith === 'BNB') {
-            let amountToSpend = Web3.utils.toWei(config.amountsToSpend.BNB.toString());
-            let callData = await pancake.swapExactETHForTokensSupportingFeeOnTransferTokens(
-                Web3.utils.toHex(0),
-                [config.tokens.WBNB.address, token.address],
-                config.wallet.address,
-                Web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3)
-            );
+        do {
+            if (boughtWith === 'BNB') {
+                let amountToSpend = Web3.utils.toWei(config.amountsToSpend.BNB.toString());
+                let callData = await pancake.swapExactETHForTokensSupportingFeeOnTransferTokens(
+                    Web3.utils.toHex(0),
+                    [config.tokens.WBNB.address, token.address],
+                    config.wallet.address,
+                    Web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3)
+                );
 
-            let estimatedGas = await callData.estimateGas({"value": Web3.utils.toHex(amountToSpend)});
-            console.log(`Gas estimado: ${estimatedGas} GWEI`);
+                let estimatedGas = await callData.estimateGas({"value": Web3.utils.toHex(amountToSpend)});
+                console.log(`Gas estimado: ${estimatedGas} GWEI`);
 
-            let privateKey = Buffer.from(config.wallet.privateKey, 'hex');
-            let count = await web3.eth.getTransactionCount(config.wallet.address);
-            let rawTransaction = {
-                "from": config.wallet.address,
-                "gasPrice": Web3.utils.toHex(config.gasPrice * 1000000000),
-                "gasLimit": Web3.utils.toHex(config.gasLimit),
-                "to": pancake.address,
-                "value": Web3.utils.toHex(amountToSpend),
-                "data": callData.encodeABI(),
-                "nonce": Web3.utils.toHex(count)
-            };
+                let privateKey = Buffer.from(config.wallet.privateKey, 'hex');
+                let count = await web3.eth.getTransactionCount(config.wallet.address);
+                let rawTransaction = {
+                    "from": config.wallet.address,
+                    "gasPrice": Web3.utils.toHex(config.gasPrice * 1000000000),
+                    "gasLimit": Web3.utils.toHex(config.gasLimit),
+                    "to": pancake.address,
+                    "value": Web3.utils.toHex(amountToSpend),
+                    "data": callData.encodeABI(),
+                    "nonce": Web3.utils.toHex(count)
+                };
 
-            let transaction = new Tx(rawTransaction, {'common': bsc_fork});
-            transaction.sign(privateKey);
+                let transaction = new Tx(rawTransaction, {'common': bsc_fork});
+                transaction.sign(privateKey);
 
-            tx = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
-        } else {
-            let amountToSpend = (new Big(config.amountsToSpend.BUSD)).times((new Big(10)).pow(tokenDecimals)).toString();
-            let callData = await pancake.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-                Web3.utils.toHex(amountToSpend),
-                Web3.utils.toHex(0),
-                [config.tokens.BUSD.address, token.address],
-                config.wallet.address,
-                Web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3)
-            );
+                try {
+                    tx = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
+                    done = true;
+                } catch (e) {
+                    console.log(`Compra no realizada. ${e.message}`);
+                    console.log('Intentamos otra vez...');
+                }
+            } else {
+                let amountToSpend = (new Big(config.amountsToSpend.BUSD)).times((new Big(10)).pow(tokenDecimals)).toString();
+                let callData = await pancake.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                    Web3.utils.toHex(amountToSpend),
+                    Web3.utils.toHex(0),
+                    [config.tokens.BUSD.address, token.address],
+                    config.wallet.address,
+                    Web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3)
+                );
 
-            let estimatedGas = await callData.estimateGas({"from": config.wallet.address});
-            console.log(`Gas estimado: ${estimatedGas} GWEI`);
+                let estimatedGas = await callData.estimateGas({"from": config.wallet.address});
+                console.log(`Gas estimado: ${estimatedGas} GWEI`);
 
-            let privateKey = Buffer.from(config.wallet.privateKey, 'hex');
-            let count = await web3.eth.getTransactionCount(config.wallet.address);
-            let rawTransaction = {
-                "from": config.wallet.address,
-                "gasPrice": Web3.utils.toHex(config.gasPrice * 1000000000),
-                "gasLimit": Web3.utils.toHex(config.gasLimit),
-                "to": pancake.address,
-                "data": callData.encodeABI(),
-                "nonce": Web3.utils.toHex(count)
-            };
+                let privateKey = Buffer.from(config.wallet.privateKey, 'hex');
+                let count = await web3.eth.getTransactionCount(config.wallet.address);
+                let rawTransaction = {
+                    "from": config.wallet.address,
+                    "gasPrice": Web3.utils.toHex(config.gasPrice * 1000000000),
+                    "gasLimit": Web3.utils.toHex(config.gasLimit),
+                    "to": pancake.address,
+                    "data": callData.encodeABI(),
+                    "nonce": Web3.utils.toHex(count)
+                };
 
-            let transaction = new Tx(rawTransaction, {'common': bsc_fork});
-            transaction.sign(privateKey);
+                let transaction = new Tx(rawTransaction, {'common': bsc_fork});
+                transaction.sign(privateKey);
 
-            tx = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
-        }
+                try {
+                    tx = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
+                    done = true;
+                } catch (e) {
+                    console.log(`Compra no realizada. ${e.message}`);
+                    console.log('Intentamos otra vez...');
+                }
+            }
+        } while (!done);
 
         console.log('Compra exitosa');
         console.log(`Tx: ${tx.transactionHash}`);
@@ -301,63 +317,77 @@ const init = async() => {
     console.log('Venderemos...');
 
     await (async() => {
-        let tx;
+        let tx, done = false;
 
-        if (boughtWith === 'BNB') {
-            let callData = await pancake.swapExactTokensForETHSupportingFeeOnTransferTokens(
-                Web3.utils.toHex(tokensReceived),
-                Web3.utils.toHex(0),
-                [token.address, config.tokens.WBNB.address],
-                config.wallet.address,
-                Web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3)
-            );
+        do {
+            if (boughtWith === 'BNB') {
+                let callData = await pancake.swapExactTokensForETHSupportingFeeOnTransferTokens(
+                    Web3.utils.toHex(tokensReceived),
+                    Web3.utils.toHex(0),
+                    [token.address, config.tokens.WBNB.address],
+                    config.wallet.address,
+                    Web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3)
+                );
 
-            let estimatedGas = await callData.estimateGas({"from": config.wallet.address});
-            console.log(`Gas estimado: ${estimatedGas} GWEI`);
+                let estimatedGas = await callData.estimateGas({"from": config.wallet.address});
+                console.log(`Gas estimado: ${estimatedGas} GWEI`);
 
-            let privateKey = Buffer.from(config.wallet.privateKey, 'hex');
-            let count = await web3.eth.getTransactionCount(config.wallet.address);
-            let rawTransaction = {
-                "from": config.wallet.address,
-                "gasPrice": Web3.utils.toHex(config.gasPrice * 1000000000),
-                "gasLimit": Web3.utils.toHex(config.gasLimit),
-                "to": pancake.address,
-                "data": callData.encodeABI(),
-                "nonce": Web3.utils.toHex(count)
-            };
+                let privateKey = Buffer.from(config.wallet.privateKey, 'hex');
+                let count = await web3.eth.getTransactionCount(config.wallet.address);
+                let rawTransaction = {
+                    "from": config.wallet.address,
+                    "gasPrice": Web3.utils.toHex(config.gasPrice * 1000000000),
+                    "gasLimit": Web3.utils.toHex(config.gasLimit),
+                    "to": pancake.address,
+                    "data": callData.encodeABI(),
+                    "nonce": Web3.utils.toHex(count)
+                };
 
-            let transaction = new Tx(rawTransaction, {'common': bsc_fork});
-            transaction.sign(privateKey);
+                let transaction = new Tx(rawTransaction, {'common': bsc_fork});
+                transaction.sign(privateKey);
 
-            tx = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
-        } else {
-            let callData = await pancake.swapExactTokensForTokensSupportingFeeOnTransferTokens(
-                Web3.utils.toHex(tokensReceived),
-                Web3.utils.toHex(0),
-                [token.address, config.tokens.BUSD.address],
-                config.wallet.address,
-                Web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3)
-            );
+                try {
+                    tx = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
+                    done = true;
+                } catch (e) {
+                    console.log(`Venta no realizada. ${e.message}`);
+                    console.log('Intentamos otra vez...');
+                }
+            } else {
+                let callData = await pancake.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                    Web3.utils.toHex(tokensReceived),
+                    Web3.utils.toHex(0),
+                    [token.address, config.tokens.BUSD.address],
+                    config.wallet.address,
+                    Web3.utils.toHex(Math.round(Date.now() / 1000) + 60 * 3)
+                );
 
-            let estimatedGas = await callData.estimateGas({"from": config.wallet.address});
-            console.log(`Gas estimado: ${estimatedGas} GWEI`);
+                let estimatedGas = await callData.estimateGas({"from": config.wallet.address});
+                console.log(`Gas estimado: ${estimatedGas} GWEI`);
 
-            let privateKey = Buffer.from(config.wallet.privateKey, 'hex');
-            let count = await web3.eth.getTransactionCount(config.wallet.address);
-            let rawTransaction = {
-                "from": config.wallet.address,
-                "gasPrice": Web3.utils.toHex(config.gasPrice * 1000000000),
-                "gasLimit": Web3.utils.toHex(config.gasLimit),
-                "to": pancake.address,
-                "data": callData.encodeABI(),
-                "nonce": Web3.utils.toHex(count)
-            };
+                let privateKey = Buffer.from(config.wallet.privateKey, 'hex');
+                let count = await web3.eth.getTransactionCount(config.wallet.address);
+                let rawTransaction = {
+                    "from": config.wallet.address,
+                    "gasPrice": Web3.utils.toHex(config.gasPrice * 1000000000),
+                    "gasLimit": Web3.utils.toHex(config.gasLimit),
+                    "to": pancake.address,
+                    "data": callData.encodeABI(),
+                    "nonce": Web3.utils.toHex(count)
+                };
 
-            let transaction = new Tx(rawTransaction, {'common': bsc_fork});
-            transaction.sign(privateKey);
+                let transaction = new Tx(rawTransaction, {'common': bsc_fork});
+                transaction.sign(privateKey);
 
-            tx = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
-        }
+                try {
+                    tx = await web3.eth.sendSignedTransaction('0x' + transaction.serialize().toString('hex'));
+                    done = true;
+                } catch (e) {
+                    console.log(`Venta no realizada. ${e.message}`);
+                    console.log('Intentamos otra vez...');
+                }
+            }
+        } while (!done);
 
         console.log('Venta exitosa');
         console.log(`Tx: ${tx.transactionHash}`);
